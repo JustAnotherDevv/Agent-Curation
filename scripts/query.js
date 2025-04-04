@@ -473,7 +473,8 @@ async function findSimilarDocuments(queryText, topN = 3) {
 }
 
 async function runSemanticSearch() {
-  const query = "Bitcoin";
+  const query = "Was Satoshi creator of the bitcoin, first blockchain?";
+  //   const query = "What are block explorers and how do I use them?";
   await findSimilarDocuments(query, 3);
 }
 
