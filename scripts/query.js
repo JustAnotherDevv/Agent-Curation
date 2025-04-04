@@ -124,7 +124,7 @@ const CONTRACT_ABI = [
   },
 ];
 
-const sampleDocuments = [
+const documents = [
   "Blockchain is a distributed ledger technology that maintains a continuously growing list of records, called blocks, which are linked and secured using cryptography. Each block contains a timestamp and transaction data that is verified by network nodes.",
   "Decentralization is a core principle of blockchain technology, removing the need for central authorities and allowing peer-to-peer transactions. This creates systems resistant to censorship and single points of failure.",
   "Consensus mechanisms are protocols that ensure all nodes in a blockchain network agree on the validity of transactions. Popular mechanisms include Proof of Work (PoW), Proof of Stake (PoS), and Delegated Proof of Stake (DPoS).",
@@ -247,7 +247,7 @@ const sampleDocuments = [
   "Token-curated registries use economic incentives to maintain high-quality lists of resources, venues, or service providers without centralized control.",
 ];
 
-async function createFixedPointValuesFromText(text, dimension, contract) {
+async function createVectorFromText(text, dimension, contract) {
   const normalizedText = text.toLowerCase().replace(/[^\w\s]/g, " ");
 
   const tokens = normalizedText
@@ -290,7 +290,6 @@ async function createFixedPointValuesFromText(text, dimension, contract) {
       const totalWords = tokens.length;
 
       const scaledFreq = frequency * 1000;
-      const scaledTotal = totalWords * 1000;
 
       try {
         const value = await contract.toFixedPoint(scaledFreq, 4);
@@ -307,12 +306,9 @@ async function createFixedPointValuesFromText(text, dimension, contract) {
   return vector;
 }
 
-function createMetadataFromText(text) {
-  const firstWords = text.split(" ").slice(0, 3).join("_");
-  return Array.from(Buffer.from(`doc-${firstWords}`));
-}
+async function findSimilarDocuments(queryText, topN = 3) {
+  console.log(`Searching for documents similar to: "${queryText}"`);
 
-async function testVectorDb() {
   try {
     const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
     const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
@@ -322,316 +318,174 @@ async function testVectorDb() {
       wallet
     );
 
-    console.log("Testing VectorDb contract...");
+    const vectorCount = await contract.getCount();
+    console.log(`Total vectors in database: ${vectorCount.toString()}`);
 
-    const initTx = await contract.initialize();
-    await initTx.wait();
-    console.log("1. Initialized contract");
+    let dimension = 50;
 
-    const scaleFactor = await contract.getScaleFactor();
-    console.log(`   Contract scale factor: ${scaleFactor.toString()}`);
-
-    console.log("2. Checking for existing vectors to delete...");
-    const count = await contract.getCount();
-    console.log(`   Found ${count.toString()} potential vectors`);
-
-    for (let id = 0; id < count; id++) {
-      const exists = await contract.vectorExists(id);
-      if (exists) {
-        console.log(`   Deleting vector with ID: ${id}`);
-        const deleteTx = await contract.deleteVector(id);
-        await deleteTx.wait();
-      }
-    }
-    console.log("   Finished deleting existing vectors");
-
-    console.log("3. Adding vectors derived from NFT-related text documents");
-    const addedVectorIds = [];
-    const numDocuments = sampleDocuments.length;
-
-    console.log(" num of docs: ", numDocuments);
-
-    // for (let i = 0; i < Math.min(3, numDocuments); i++) {
-    for (let i = 0; i < numDocuments; i++) {
-      const document = sampleDocuments[i];
-      try {
-        const dimension = 50;
-        const components = await createFixedPointValuesFromText(
-          document,
-          dimension,
-          contract
-        );
-        const metadata = createMetadataFromText(document);
-
-        console.log(
-          `   Adding vector ${i + 1} from document: "${document.substring(
-            0,
-            40
-          )}${document.length > 40 ? "..." : ""}"`
-        );
-        console.log(`   Vector dimensions: ${dimension}`);
-
-        console.log(
-          `   First 3 components: [${components
-            .slice(0, 3)
-            .map((c) => c.toString())
-            .join(", ")}...]`
-        );
-
-        const addTx = await contract.addVector(components, metadata);
-        const receipt = await addTx.wait();
-
-        addedVectorIds.push(i);
-
-        const magSq = await contract.magnitudeSquared(i);
-        console.log(`   Vector ${i} magnitude squared: ${magSq.toString()}`);
-      } catch (error) {
-        console.error(`   Error adding vector ${i}: ${error.message}`);
+    for (let i = 0; i < vectorCount; i++) {
+      if (await contract.vectorExists(i)) {
+        dimension = await contract.getDimension(i);
+        dimension = parseInt(dimension.toString());
+        console.log(`Detected vector dimension: ${dimension}`);
+        break;
       }
     }
 
-    console.log("4. Testing semantic similarity between document pairs");
-    console.log(
-      "   All vectors have the same dimension (10), so we can compare any pair"
+    console.log(`Converting query to ${dimension}-dimensional vector...`);
+    const queryVector = await createVectorFromText(
+      queryText,
+      dimension,
+      contract
     );
 
-    const testPairs = [
-      { id1: 0, id2: 1, description: "NFT basics and marketplaces" },
-      { id1: 1, id2: 2, description: "NFT marketplaces and standards" },
-      { id1: 0, id2: 2, description: "NFTs and standards" },
-    ];
+    const queryMetadata = Array.from(Buffer.from("query"));
+    const addTx = await contract.addVector(queryVector, queryMetadata);
+    const receipt = await addTx.wait();
 
-    for (const { id1, id2, description } of testPairs) {
-      console.log(
-        `   Test ${
-          testPairs.indexOf({ id1, id2, description }) + 1
-        }: ${description} (Documents ${id1} and ${id2})`
-      );
-      console.log(
-        `     Doc ${id1}: "${sampleDocuments[id1].substring(0, 40)}..."`
-      );
-      console.log(
-        `     Doc ${id2}: "${sampleDocuments[id2].substring(0, 40)}..."`
-      );
+    const queryId = vectorCount.toNumber();
+    console.log(`Added query as vector ID: ${queryId}`);
 
+    const directSimilarities = [];
+
+    console.log(
+      "Computing similarities directly between query and documents..."
+    );
+
+    const queryTerms = queryText
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+
+    let startingDocIndex = -1;
+    let lastDocIndex = -1;
+    const existingVectorIds = [];
+
+    for (let i = 0; i < vectorCount; i++) {
       try {
-        const dotTx = await contract.dotProduct(id1, id2);
-        await dotTx.wait();
-        console.log(`     Dot product calculated (transaction successful)`);
+        if (await contract.vectorExists(i)) {
+          existingVectorIds.push(i);
 
-        const magSq1 = await contract.magnitudeSquared(id1);
-        const magSq2 = await contract.magnitudeSquared(id2);
-        console.log(`     Vector ${id1} magnitude squared: ${magSq1}`);
-        console.log(`     Vector ${id2} magnitude squared: ${magSq2}`);
+          for (let docIndex = 0; docIndex < documents.length; docIndex++) {
+            const doc = documents[docIndex];
+            let matchCount = 0;
 
-        try {
-          const cosTx = await contract.cosineSimilarity(id1, id2);
-          await cosTx.wait();
-          console.log(
-            `     Cosine similarity calculated (transaction successful)`
-          );
-        } catch (error) {
-          console.log(
-            `     Error computing cosine similarity: ${error.message}`
-          );
+            for (const term of queryTerms) {
+              const regex = new RegExp(term, "gi");
+              const matches = doc.match(regex) || [];
+              matchCount += matches.length;
+            }
+
+            if (matchCount > 0) {
+              if (startingDocIndex === -1) {
+                startingDocIndex = i;
+                console.log(
+                  `Possible starting document vector found at ID ${i}`
+                );
+              }
+              lastDocIndex = i;
+            }
+          }
         }
-      } catch (error) {
-        console.log(`     Error computing metrics: ${error.message}`);
-      }
+      } catch (error) {}
     }
 
     console.log(
-      "\n5. Creating a test vector with known values to check magnitude calculation"
+      `Found ${existingVectorIds.length} existing vectors in the database.`
     );
-    const testDimension = 3;
-    const testValues = [];
+    console.log(
+      `Estimated document vectors range: ${startingDocIndex} to ${lastDocIndex}`
+    );
 
-    try {
-      const value1 = await contract.toFixedPoint(10, 1);
-      testValues.push(value1);
-      console.log(`   Test value 1: ${value1.toString()}`);
+    for (let i = 0; i < documents.length; i++) {
+      const docText = documents[i];
+      let matchScore = 0;
 
-      const value2 = await contract.toFixedPoint(5, 1);
-      testValues.push(value2);
-      console.log(`   Test value 2: ${value2.toString()}`);
-
-      const value3 = await contract.toFixedPoint(25, 2);
-      testValues.push(value3);
-      console.log(`   Test value 3: ${value3.toString()}`);
-
-      console.log(
-        `   Adding test vector with components: [${testValues
-          .map((v) => v.toString())
-          .join(", ")}]`
-      );
-      const testMetadata = Array.from(Buffer.from("test-vector"));
-      const testVectorTx = await contract.addVector(testValues, testMetadata);
-      await testVectorTx.wait();
-
-      const testVectorId = addedVectorIds.length;
-      console.log(`   Test vector ID: ${testVectorId}`);
-
-      const testMagSq = await contract.magnitudeSquared(testVectorId);
-      console.log(`   Test vector magnitude squared: ${testMagSq.toString()}`);
-
-      const testDotTx = await contract.dotProduct(testVectorId, testVectorId);
-      await testDotTx.wait();
-      console.log(`   Test vector dot product with itself calculated`);
-
-      addedVectorIds.push(testVectorId);
-    } catch (error) {
-      console.error(`   Error creating test vector: ${error.message}`);
-    }
-
-    console.log("\n6. Analyzing documents for NFT-related information");
-
-    const nftKeywords = [
-      "nft",
-      "non-fungible",
-      //   "token",
-      //   "blockchain",
-      //   "digital art",
-      //   "collectible",
-    ];
-
-    const documentScores = [];
-    for (const docId of addedVectorIds.slice(0, numDocuments)) {
-      console.log(docId);
-      if (docId >= sampleDocuments.length) continue;
-
-      const document = sampleDocuments[docId];
-      const normalizedDoc = document.toLowerCase();
-
-      let score = 0;
-      for (const keyword of nftKeywords) {
-        if (normalizedDoc.includes(keyword)) {
-          score += 1;
-        }
+      for (const term of queryTerms) {
+        const regex = new RegExp(term, "gi");
+        const matches = docText.match(regex) || [];
+        matchScore += matches.length;
       }
 
-      const nftMatches = (normalizedDoc.match(/nft/g) || []).length;
-      score += nftMatches * 2;
-
-      documentScores.push({
-        docId,
-        score,
-        text: document,
+      directSimilarities.push({
+        docIndex: i,
+        score: matchScore,
+        text: docText,
       });
     }
 
-    documentScores.sort((a, b) => b.score - a.score);
+    directSimilarities.sort((a, b) => b.score - a.score);
 
-    console.log("   Top NFT-related documents:");
-    for (let i = 0; i < Math.min(3, documentScores.length); i++) {
-      const result = documentScores[i];
-      console.log(
-        `     ${i + 1}. Document ${result.docId} (score: ${result.score})`
-      );
-      console.log(`        "${result.text.substring(0, 100)}..."`);
-    }
+    const topResults = directSimilarities.slice(0, topN);
 
-    console.log("\n7. Creating and testing a query vector for NFT relevance");
+    console.log("Attempting to compute blockchain similarities...");
 
-    try {
-      const nftQuery =
-        "NFT non-fungible token digital ownership blockchain unique collectible";
-      console.log(`   Query: "${nftQuery}"`);
-
-      const dimension = 50;
-      const queryVector = await createFixedPointValuesFromText(
-        nftQuery,
-        dimension,
-        contract
-      );
-
-      console.log(`   Adding query as a temporary vector`);
-      const queryMetadata = Array.from(Buffer.from("nft-query"));
-      const queryTx = await contract.addVector(queryVector, queryMetadata);
-      const queryReceipt = await queryTx.wait();
-
-      const queryId = addedVectorIds.length;
-      console.log(`   Query vector ID: ${queryId}`);
-      addedVectorIds.push(queryId);
-
-      console.log(
-        `   Computing dot product with all documents (measure of relevance):`
-      );
-      const relevanceScores = [];
-
-      for (const docId of addedVectorIds) {
-        if (docId === queryId) continue;
-
+    if (startingDocIndex >= 0 && lastDocIndex >= 0) {
+      for (
+        let i = startingDocIndex;
+        i <= lastDocIndex && i < vectorCount;
+        i++
+      ) {
         try {
-          const exists = await contract.vectorExists(docId);
-          if (!exists) continue;
-
-          if (docId < sampleDocuments.length) {
-            const dotTx = await contract.dotProduct(queryId, docId);
-            await dotTx.wait();
-
-            const mag = await contract.magnitudeSquared(docId);
-
-            const nftCount = (sampleDocuments[docId].match(/NFT/g) || [])
-              .length;
-
-            relevanceScores.push({
-              docId,
-              nftMentions: nftCount,
-              magnitude: mag.toString(),
-              text: sampleDocuments[docId],
-            });
+          if (await contract.vectorExists(i)) {
+            const dotProductTx = await contract.dotProduct(queryId, i);
+            await dotProductTx.wait();
 
             console.log(
-              `     Doc ${docId}: NFT mentions: ${nftCount}, Magnitude: ${mag}`
+              `Computed similarity between query (${queryId}) and vector ${i}`
             );
+
+            try {
+              const cosineTx = await contract.cosineSimilarity(queryId, i);
+              await cosineTx.wait();
+              console.log(`  Cosine similarity computed successfully`);
+            } catch (error) {
+              console.log(
+                `  Cosine similarity computation failed: ${error.message}`
+              );
+            }
           }
         } catch (error) {
-          console.log(`     Error processing doc ${docId}: ${error.message}`);
+          console.log(`  Error processing vector ${i}: ${error.message}`);
         }
       }
-
-      relevanceScores.sort((a, b) => b.nftMentions - a.nftMentions);
-
-      console.log(`   Top most relevant documents to NFT query (by mentions):`);
-      for (let i = 0; i < Math.min(3, relevanceScores.length); i++) {
-        const result = relevanceScores[i];
-        console.log(
-          `     ${i + 1}. Document ${result.docId} (NFT mentions: ${
-            result.nftMentions
-          })`
-        );
-        console.log(`        "${result.text.substring(0, 100)}..."`);
-      }
-
-      console.log(`   Deleting the temporary query vector (ID: ${queryId})`);
-      const deleteQueryTx = await contract.deleteVector(queryId);
-      await deleteQueryTx.wait();
-    } catch (error) {
-      console.error(`   Error in NFT query test: ${error.message}`);
     }
 
-    const finalCount = await contract.getCount();
-    console.log(`\n8. Final vector count: ${finalCount}`);
-
-    const deleteId = 0;
-    console.log(
-      `9. Deleting document vector ${deleteId}: "${sampleDocuments[
-        deleteId
-      ].substring(0, 40)}..."`
-    );
-    const deleteTx = await contract.deleteVector(deleteId);
+    console.log(`Deleting query vector (ID: ${queryId})`);
+    const deleteTx = await contract.deleteVector(queryId);
     await deleteTx.wait();
 
-    const existsAfter = await contract.vectorExists(deleteId);
-    console.log(`   Vector ${deleteId} exists after deletion: ${existsAfter}`);
+    console.log("\nResults (direct text similarity):");
+    console.log("---------------------------------");
+    for (let i = 0; i < topResults.length; i++) {
+      const result = topResults[i];
+      console.log(
+        `${i + 1}. SCORE: ${result.score} | DOC INDEX: ${result.docIndex}`
+      );
+      console.log(`   ${result.text.substring(0, 100)}...\n`);
+    }
 
-    console.log("All tests completed successfully!");
+    return topResults;
   } catch (error) {
-    console.error("Error during testing:", error);
+    console.error("Error finding similar documents:", error);
+    return [];
   }
 }
 
-testVectorDb()
+async function runSemanticSearch() {
+  const query = "Bitcoin";
+  await findSimilarDocuments(query, 3);
+}
+
+async function main() {
+  console.log("========================");
+  console.log("VECTOR DB SEMANTIC SEARCH");
+  console.log("========================\n");
+
+  await runSemanticSearch();
+}
+
+main()
   .then(() => process.exit(0))
   .catch((error) => {
     console.error("Fatal error:", error);
