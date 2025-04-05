@@ -17,6 +17,81 @@ Curation agent is AI agent focused on collecting, filtering and curating news so
 - **Arbitrum Stylus**
 - **Akasha Network**
 
+```mermaid
+flowchart TD
+    subgraph ext["External Data Sources"]
+        A1[Cointelegraph RSS] --> |Web Scraping| C1
+        A2[Other Data Sources] --> |Coming Soon| C1
+    end
+
+    subgraph proc["AI Processing Layer"]
+        C1[Data Collection Engine]
+        C2[Content Listener]
+        C3[AI Moderation Engine]
+        C4[Vector Embedding]
+        C5[Classification & Categorization]
+        C6[Summarization]
+
+        C1 --> C3
+        C2 --> C3
+        C3 --> C4
+        C3 --> C5
+        C3 --> C6
+        C5 --> C4
+        C6 --> C4
+    end
+
+    subgraph storage["Storage Layer"]
+        D1[(Arbitrum Stylus\nVector Database)]
+        D2[(Metadata Store)]
+        D3[(Content Cache)]
+        
+        C4 --> D1
+        C5 --> D2
+        C6 --> D3
+    end
+
+    subgraph filter["Filter & Decision Layer"]
+        E1{Quality Filter}
+        E2{Spam Detection}
+        E3{Fake News Classifier}
+        E4{Content Relevance}
+        
+        D1 --> E1
+        D1 --> E2
+        D1 --> E3
+        D2 --> E4
+    end
+
+    subgraph akasha["Akasha Integration"]
+        F1[AI-Powered Feed]
+        F2[Custom Filters]
+        F3[Community Notes]
+        F4[Moderation UI]
+        
+        E1 --> F1
+        E2 --> F1
+        E3 --> F1
+        E4 --> F1
+        
+        F1 --> F2
+        F1 --> F3
+        F3 --> F4
+    end
+
+    classDef blueBox fill:#d0e8ff,stroke:#3080c0,stroke-width:2px
+    classDef greenBox fill:#d0ffe0,stroke:#30a050,stroke-width:2px
+    classDef purpleBox fill:#e0d0ff,stroke:#6030a0,stroke-width:2px
+    classDef orangeBox fill:#ffe0d0,stroke:#e07030,stroke-width:2px
+    classDef redBox fill:#ffd0d0,stroke:#a03030,stroke-width:2px
+    
+    class ext blueBox
+    class proc greenBox
+    class storage purpleBox
+    class filter orangeBox
+    class akasha redBox
+```
+
 ## Business Plan
 
 ### Problem

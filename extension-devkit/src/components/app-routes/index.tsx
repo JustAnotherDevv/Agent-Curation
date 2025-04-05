@@ -10,16 +10,19 @@ import { ICreateRouter } from '@akashaorg/typings/lib/ui';
 import PollPage from '../poll-page';
 import PollFormPage from '../poll-form-page';
 import NewsFeedPage from '../news-feed-page';
+import CuratedPage from '../curated-page';
 
 const POLL_EDITOR = 'Poll editor';
 const POLLS = 'Polls';
 
 const NEWS_FEED = 'AI News Feed';
+const CURATED_POSTS = 'Curated Posts';
 
 const routes = {
   [POLL_EDITOR]: '/poll-editor',
   [POLLS]: '/polls',
   [NEWS_FEED]: '/news',
+  [CURATED_POSTS]: '/curated',
 } as const;
 
 const rootRoute = createRootRoute({
@@ -77,7 +80,28 @@ const NewsFeedRoute = createRoute({
   },
 });
 
-const routeTree = rootRoute.addChildren([defaultRoute, pollsRoute, pollEditorRoute, NewsFeedRoute]);
+const CuratedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes[CURATED_POSTS],
+  component: () => {
+    return (
+      <CatchBoundary
+        getResetKey={() => 'polls_form_reset'}
+        errorComponent={() => <div>Not found</div>}
+      >
+        <CuratedPage />
+      </CatchBoundary>
+    );
+  },
+});
+
+const routeTree = rootRoute.addChildren([
+  defaultRoute,
+  pollsRoute,
+  pollEditorRoute,
+  CuratedRoute,
+  NewsFeedRoute,
+]);
 
 const router = ({ baseRouteName, apolloClient }: ICreateRouter) =>
   createRouter({
@@ -86,4 +110,4 @@ const router = ({ baseRouteName, apolloClient }: ICreateRouter) =>
     defaultErrorComponent: ({ error }) => <div>Error: {error.message}</div>,
   });
 
-export { routes, router, POLL_EDITOR, POLLS, NEWS_FEED };
+export { routes, router, POLL_EDITOR, POLLS, NEWS_FEED, CURATED_POSTS };

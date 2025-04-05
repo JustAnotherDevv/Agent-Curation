@@ -5,7 +5,7 @@ import {
   LogoTypeSource,
   MenuItemType,
 } from '@akashaorg/typings/lib/ui';
-import { POLLS, NEWS_FEED, routes } from './components/app-routes';
+import { POLLS, NEWS_FEED, CURATED_POSTS, routes } from './components/app-routes';
 import { SquareCheck } from 'lucide-react';
 import getSDK from '@akashaorg/core-sdk';
 import { getComposeClient } from './api';
@@ -88,17 +88,23 @@ export const register = (opts: IntegrationRegistrationOptions): IAppConfig => {
           type: MenuItemType.Internal,
         },
         {
-          label: POLLS,
+          label: CURATED_POSTS,
           index: 0,
-          route: routes[POLLS],
+          route: routes[CURATED_POSTS],
           type: MenuItemType.Internal,
         },
-        {
-          label: POLL_EDITOR,
-          index: 1,
-          route: routes[POLL_EDITOR],
-          type: MenuItemType.Internal,
-        },
+        // {
+        //   label: POLLS,
+        //   index: 0,
+        //   route: routes[POLLS],
+        //   type: MenuItemType.Internal,
+        // },
+        // {
+        //   label: POLL_EDITOR,
+        //   index: 1,
+        //   route: routes[POLL_EDITOR],
+        //   type: MenuItemType.Internal,
+        // },
       ],
     },
 
