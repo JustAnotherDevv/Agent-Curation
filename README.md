@@ -1,5 +1,7 @@
 # Curation Agent
 
+bb21b897-0e88-489a-9bf4-8af5450ff1f7
+
 ## Overview
 
 Curation agent is AI agent focused on collecting, filtering and curating news sources, posts and messages for the Akasha Network Core to prevent spam, fake news and gather information from third-aprty sources.
@@ -45,7 +47,7 @@ flowchart TD
         D1[(Arbitrum Stylus\nVector Database)]
         D2[(Metadata Store)]
         D3[(Content Cache)]
-        
+
         C4 --> D1
         C5 --> D2
         C6 --> D3
@@ -56,7 +58,7 @@ flowchart TD
         E2{Spam Detection}
         E3{Fake News Classifier}
         E4{Content Relevance}
-        
+
         D1 --> E1
         D1 --> E2
         D1 --> E3
@@ -68,12 +70,12 @@ flowchart TD
         F2[Custom Filters]
         F3[Community Notes]
         F4[Moderation UI]
-        
+
         E1 --> F1
         E2 --> F1
         E3 --> F1
         E4 --> F1
-        
+
         F1 --> F2
         F1 --> F3
         F3 --> F4
@@ -84,7 +86,7 @@ flowchart TD
     classDef purpleBox fill:#e0d0ff,stroke:#6030a0,stroke-width:2px
     classDef orangeBox fill:#ffe0d0,stroke:#e07030,stroke-width:2px
     classDef redBox fill:#ffd0d0,stroke:#a03030,stroke-width:2px
-    
+
     class ext blueBox
     class proc greenBox
     class storage purpleBox
@@ -136,7 +138,7 @@ Curation Agent addresses critical infrastructure needs for the social networks. 
 
 ### Stylus
 
--
+- Check Stylus docs to see how to setup stylus.
 
 ### AI Agent
 
